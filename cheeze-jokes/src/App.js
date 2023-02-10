@@ -1,4 +1,5 @@
 import './App.css';
+import Jokelist from './Components/Jokelist';
 
 function App() {
   return (
@@ -6,6 +7,9 @@ function App() {
       <header className="header">
       </header>
       <main>
+        <div className='App-Main'>
+          <Jokelist />
+        </div>
       </main>
     </div>
   );
