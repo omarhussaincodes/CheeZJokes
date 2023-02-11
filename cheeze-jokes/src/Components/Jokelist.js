@@ -1,92 +1,104 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+/* eslint-disable jsx-a11y/alt-text */
+import React, { Component } from "react";
+import Joke from "./Joke";
+import axios from "axios";
 import { v4 as uuidv4 } from 'uuid';
-import Joke from './Joke';
+import "../Components/jokelist.css";
 
-function Jokelist() {
-    const jokeUrl = "https://icanhazdadjoke.com/";
-    const numOfJokesToFetch = 8;
-    const [jokes, setJokes] = useState(JSON.parse(window.localStorage.getItem("savedJokes") || "[]"));
-
-    useEffect(() => {
-        if (jokes.length === 0) {
-            fetchJokes();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const fetchJokes = async () => {
-        const allJokes = [];
-        const header = {
-            Accept: 'application/json'
-        };
-        while (allJokes.length < numOfJokesToFetch) {
-            await axios.get(jokeUrl, {
-                headers: header
-            }).then(res => {
-                if (res.status === 200) {
-                    const filteredData = checkUniqueJoke(res.data);
-                    if (filteredData.length === 0) {
-                        allJokes.push({
-                            jokeId: uuidv4(),
-                            id: res.data?.id,
-                            joke: res.data?.joke,
-                            score: 0
-                        });
-                    }
-                } else {
-                    console.log("Failed to fetch a Joke!");
-                }
-            })
-                .catch(e => console.log(e, "Failed to get jokes from API."));
-        }
-        // compare allJokes and Jokes and then add only jokes which are not present in jokes state.
-        setJokes((prevJokes) => {
-            if (prevJokes && prevJokes.length > 0) {
-                return [...prevJokes, ...allJokes];
-            } else {
-                return allJokes;
-            }
+class JokeList extends Component {
+  static defaultProps = {
+    numJokesToGet: 8
+  };
+  constructor(props) {
+    super(props);
+    this.state = {
+      jokes: JSON.parse(window.localStorage.getItem("jokes") || "[]"),
+      loading: false
+    };
+    this.seenJokes = new Set(this.state.jokes.map(j => j.text));
+    console.log(this.seenJokes);
+    this.handleClick = this.handleClick.bind(this);
+  }
+  componentDidMount() {
+    if (this.state.jokes.length === 0) this.getJokes();
+  }
+  async getJokes() {
+    try {
+      let jokes = [];
+      while (jokes.length < this.props.numJokesToGet) {
+        let res = await axios.get("https://icanhazdadjoke.com/", {
+          headers: { Accept: "application/json" }
         });
-        localStorage.setItem("savedJokes", JSON.stringify(jokes));
-    };
-
-    const fetchMoreJokes = () => {
-        fetchJokes();
+        let newJoke = res.data.joke;
+        if (!this.seenJokes.has(newJoke)) {
+          jokes.push({ id: uuidv4(), text: newJoke, votes: 0 });
+        } else {
+          console.log("FOUND A DUPLICATE!");
+          console.log(newJoke);
+        }
+      }
+      this.setState(
+        st => ({
+          loading: false,
+          jokes: [...st.jokes, ...jokes]
+        }),
+        () =>
+          window.localStorage.setItem("jokes", JSON.stringify(this.state.jokes))
+      );
+    } catch (e) {
+      alert(e);
+      this.setState({ loading: false });
     }
-
-    const checkUniqueJoke = (joke) => {
-        return jokes.filter(j => j.id === joke.id);
-    }
-
-    const upVote = (id) => {
-        setJokes(jokes.map(j => (j.id === id) ? { ...j, score: j.score + 1 } : j));
-        sortBasedOfScore();
-    };
-
-    const downVote = (id) => {
-        setJokes(jokes.map(j => (j.id === id) ? { ...j, score: j.score - 1 } : j));
-        sortBasedOfScore();
-    };
-
-    const sortBasedOfScore = () => {
-        setJokes((prevJokes) => [...prevJokes].sort((a, b) => (parseFloat(b.score) - parseFloat(a.score))));
-        localStorage.setItem("savedJokes", JSON.stringify(jokes));
-    };
-
-    return (
-        <div className='Joke-List'>
-            <div>
-                <button onClick={fetchMoreJokes}>More Jokes Please!</button>
-            </div>
-            <div>
-                {jokes?.map(joke => (
-                    <Joke key={joke.jokeId} id={joke.id} score={joke.score} joke={joke.joke} upVote={upVote} downVote={downVote} />
-                ))}
-            </div>
-
+  }
+  handleVote(id, delta) {
+    this.setState(
+      st => ({
+        jokes: st.jokes.map(j =>
+          j.id === id ? { ...j, votes: j.votes + delta } : j
+        )
+      }),
+      () =>
+        window.localStorage.setItem("jokes", JSON.stringify(this.state.jokes))
+    );
+  }
+  handleClick() {
+    this.setState({ loading: true }, this.getJokes);
+  }
+  render() {
+    if (this.state.loading) {
+      return (
+        <div className='JokeList-spinner'>
+          <i className='far fa-8x fa-laugh fa-spin' />
+          <h1 className='JokeList-title'>Loading...</h1>
         </div>
-    )
-}
+      );
+    }
+    let jokes = this.state.jokes.sort((a, b) => b.votes - a.votes);
+    return (
+      <div className='JokeList'>
+        <div className='JokeList-sidebar'>
+          <h1 className='JokeList-title'>
+            Chee<span> Z </span> Jokes
+          </h1>
+          <img src='https://assets.dryicons.com/uploads/icon/svg/8927/0eb14c71-38f2-433a-bfc8-23d9c99b3647.svg' />
+          <button className='JokeList-getmore' onClick={this.handleClick}>
+            Fetch Jokes
+          </button>
+        </div>
 
-export default Jokelist
+        <div className='JokeList-jokes'>
+          {jokes.map(j => (
+            <Joke
+              key={j.id}
+              votes={j.votes}
+              text={j.text}
+              upvote={() => this.handleVote(j.id, 1)}
+              downvote={() => this.handleVote(j.id, -1)}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+}
+export default JokeList;
